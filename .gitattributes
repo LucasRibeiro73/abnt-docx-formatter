@@ -1,0 +1,3 @@
+# Keep the GitHub language bar focused on the Python code
+*.css linguist-detectable=false
+*.html linguist-detectable=false
