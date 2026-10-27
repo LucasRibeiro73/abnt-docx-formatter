@@ -5,6 +5,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from formatador_abnt import formatador_abnt_profissional
 from models import db, User
+from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+
+load_dotenv()
 
 PACOTES_DE_CREDITOS = {
     5: {"nome": "Pacote Básico", "preco_centavos": 990, "creditos": 5},
@@ -13,15 +17,15 @@ PACOTES_DE_CREDITOS = {
 }
 
 # --- CONFIGURAÇÃO INICIAL ---
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'uma-chave-secreta-bem-segura'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app = Flask(__name__, template_folder='Templates')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-only-change-me')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # --- CONFIGURAÇÃO DO STRIPE ---
-stripe.api_key = 'chave-secreta' 
-endpoint_secret = 'whsec_chave-secreta'
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY') 
+endpoint_secret = os.environ.get('STRIPE_WEBHOOK_SECRET')
 
 # Inicializa as extensões
 db.init_app(app)
@@ -113,10 +117,15 @@ def formatar_arquivo():
         flash('Por favor, selecione um arquivo.', 'danger')
         return redirect(url_for('dashboard'))
         
-    caminho_entrada = os.path.join(app.config['UPLOAD_FOLDER'], arquivo.filename)
+    nome_seguro = secure_filename(arquivo.filename)
+    if not nome_seguro.lower().endswith('.docx'):
+        flash('Envie um arquivo .docx.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    caminho_entrada = os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro)
     arquivo.save(caminho_entrada)
     formatador_abnt_profissional(caminho_entrada)
-    nome_arquivo_saida = arquivo.filename.replace('.docx', '_FORMATADO_PROFISSIONAL.docx')
+    nome_arquivo_saida = nome_seguro.replace('.docx', '_FORMATADO_PROFISSIONAL.docx')
 
     current_user.credits -= 1
     db.session.commit()
@@ -197,4 +206,4 @@ def stripe_webhook():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1')
